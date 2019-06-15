@@ -1,5 +1,5 @@
 # Marketplace Operator
-Marketplace is a conduit to bring off-cluster operators to your cluster.
+Marketplace is a conduit to bring off-cluster operators to your cluster. Modified the code to create custom endpoint, but use the exposeMetrics() and createServiceMonitor() functions of the sdk.
 
 ## Prerequisites
 In order to deploy the Marketplace Operator, you must:
