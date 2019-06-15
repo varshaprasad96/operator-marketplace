@@ -7,6 +7,10 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	olm "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1alpha1"
 	"github.com/operator-framework/operator-lifecycle-manager/pkg/lib/signals"
 	"github.com/operator-framework/operator-marketplace/pkg/apis"
@@ -16,11 +20,30 @@ import (
 	"github.com/operator-framework/operator-marketplace/pkg/registry"
 	"github.com/operator-framework/operator-marketplace/pkg/status"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
+	"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
+
 	log "github.com/sirupsen/logrus"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+)
+
+func recordMetrics() {
+	go func() {
+		for {
+			opsProcessed.Inc()
+			time.Sleep(2 * time.Second)
+			log.Printf("Recording custom metrics")
+		}
+	}()
+}
+
+var (
+	opsProcessed = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "myapp_processed_ops_total",
+		Help: "The total number of processed events Test",
+	})
 )
 
 const (
@@ -33,13 +56,24 @@ const (
 )
 
 func printVersion() {
-	log.Printf("Go Version: %s", runtime.Version())
+	log.Printf("Hello Go Version: %s", runtime.Version())
 	log.Printf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
 	log.Printf("operator-sdk Version: %v", sdkVersion.Version)
 }
 
+// func init() {
+// 	prometheus.MustRegister(opsProcessed)
+// 	log.Printf("Registered")
+// }
+
 func main() {
 	printVersion()
+	recordMetrics()
+
+	http.Handle("/metrics", promhttp.Handler())
+	go http.ListenAndServe(":8080", nil)
+
+	log.Info(" Custom Metircs recorded")
 
 	// Parse the command line arguments for the registry server image
 	flag.StringVar(&registry.ServerImage, "registryServerImage",
@@ -57,10 +91,24 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// // Create a new Cmd to provide shared dependencies and start components
+	// mgr, err := manager.New(cfg, manager.Options{Namespace: namespace})
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// Change the below variables to serve metrics on different host or port.
+	// var metricsHost = "0.0.0.0"
+	// var metricsPort int32 = 8383
 	// Create a new Cmd to provide shared dependencies and start components
-	mgr, err := manager.New(cfg, manager.Options{Namespace: namespace})
+	mgr, err := manager.New(cfg, manager.Options{
+		Namespace:      namespace,
+		MapperProvider: restmapper.NewDynamicRESTMapper,
+		//MetricsBindAddress: fmt.Sprintf("%s:%d", metricsHost, metricsPort),
+	})
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err, "")
+		os.Exit(1)
 	}
 
 	log.Print("Registering Components.")
@@ -82,6 +130,38 @@ func main() {
 	if err := controller.AddToManager(mgr); err != nil {
 		exit(err)
 	}
+
+	//ctx := context.TODO()
+
+	// Create Service object to expose the metrics port.
+	/*var metricsPort int32 = 2112
+	service, err := metrics.ExposeMetricsPort(ctx, metricsPort)
+	fmt.Printf("Service %v", service)
+	if err != nil {
+		log.Info("ERROR EXPOSING METRICS")
+		log.Info(err.Error())
+	}*/
+	// Create one `ServiceMonitor` per application per namespace.
+	// Change below value to name of the Namespace you want the `ServiceMonitor` to be created in.
+	/*ns := "openshift-marketplace"
+	// Populate below with the Service(s) for which you want to create ServiceMonitors.
+	services := []*v1.Service{}
+	services = append(services, service)
+
+	fmt.Printf("Services %v", services)
+
+	// Pass the Service(s) to the helper function, which in turn returns the array of `ServiceMonitor` objects.
+	_, err = metrics.CreateServiceMonitors(cfg, ns, services)
+	if err != nil {
+		log.Info("ERROR CREATING SERVICE MONITORS")
+		log.Info(err.Error())
+	} else {
+		log.Info("NO ERROR CREATING SERVICE MONITORS")
+
+	}
+
+	log.Info("Expose-Metrics succeded")
+	log.Info("Starting the Cmd.")*/
 
 	// Serve a health check.
 	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
