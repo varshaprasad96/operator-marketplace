@@ -1,13 +1,15 @@
 package main
 
 import (
-	"context"
 	"flag"
-	"fmt"
 	"net/http"
 	"os"
 	"runtime"
 	"time"
+
+	"github.com/operator-framework/operator-marketplace/pkg/testmetrics"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	olm "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1alpha1"
 	"github.com/operator-framework/operator-lifecycle-manager/pkg/lib/signals"
@@ -18,16 +20,64 @@ import (
 	"github.com/operator-framework/operator-marketplace/pkg/registry"
 	"github.com/operator-framework/operator-marketplace/pkg/status"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
-	"github.com/operator-framework/operator-sdk/pkg/metrics"
 	"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
+
 	log "github.com/sirupsen/logrus"
-	corev1 "k8s.io/api/core/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
+
+/**
+*
+* Increases the counter every 2 seconds
+ */
+
+/*func recordMetrics() {
+	go func() {
+		for {
+			opsProcessed.Inc()
+			gaugeTest.SetToCurrentTime()
+			time.Sleep(2 * time.Second)
+			log.Printf("Recording custom metrics")
+		}
+	}()
+}*/
+
+/**
+*
+* Variable to store custom metrics - counter
+*
+ */
+
+/*var (
+	opsProcessed = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "myapp_processed_ops_total",
+		Help: "The total number of processed events Test",
+	})
+)*/
+
+/**
+*
+* Variable to store custom metrics - gauge
+*
+ */
+
+/*var (
+	gaugeTest = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "testing_gauge_for_metrics",
+		Help: "Testing decrementing gauge",
+	})
+)*/
+
+/*var (
+	histTest = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "test_histogram",
+		Help:    "Random data testing histogram",
+		Buckets: prometheus.LinearBuckets(20, 5, 5),
+	})
+)*/
 
 const (
 	// TODO: resyncInterval is hardcoded to 1 hour now, it would have to be
@@ -36,18 +86,40 @@ const (
 
 	initialWait                = time.Duration(1) * time.Minute
 	updateNotificationSendWait = time.Duration(10) * time.Minute
-	metricsHost                = "0.0.0.0"
-	metricsPort                = 8383
 )
 
 func printVersion() {
-	log.Printf("Go Version: %s", runtime.Version())
+	log.Printf("Hellooo Go Version: %s", runtime.Version())
 	log.Printf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
 	log.Printf("operator-sdk Version: %v", sdkVersion.Version)
 }
 
+/**
+*
+* Registration of metrics manually, when Promauto is not used. Can uncomment this
+* if required.
+ */
+
+/*
+func init() {
+	prometheus.MustRegister(opsProcessed)
+	prometheus.MustRegister(gaugeTest)
+	log.Printf("Registered")
+}*/
+
 func main() {
+
+	/*for i := 0; i < 1000; i++ {
+		histTest.Observe(30 + math.Floor(120*math.Sin(float64(i)*0.1))/10)
+	}*/
+
 	printVersion()
+	testmetrics.RecordMetrics()
+
+	http.Handle("/metrics", promhttp.Handler())
+	go http.ListenAndServe(":8080", nil)
+
+	log.Info("Custom Metircs recorded")
 
 	// Parse the command line arguments for the registry server image
 	flag.StringVar(&registry.ServerImage, "registryServerImage",
@@ -65,14 +137,24 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// // Create a new Cmd to provide shared dependencies and start components
+	// mgr, err := manager.New(cfg, manager.Options{Namespace: namespace})
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// Change the below variables to serve metrics on different host or port.
+	// var metricsHost = "0.0.0.0"
+	// var metricsPort int32 = 8383
 	// Create a new Cmd to provide shared dependencies and start components
 	mgr, err := manager.New(cfg, manager.Options{
-		Namespace:          namespace,
-		MapperProvider:     restmapper.NewDynamicRESTMapper,
-		MetricsBindAddress: fmt.Sprintf("%s:%d", metricsHost, metricsPort),
+		Namespace:      namespace,
+		MapperProvider: restmapper.NewDynamicRESTMapper,
+		//MetricsBindAddress: fmt.Sprintf("%s:%d", metricsHost, metricsPort),
 	})
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err, "")
+		os.Exit(1)
 	}
 
 	log.Print("Registering Components.")
@@ -95,8 +177,37 @@ func main() {
 		exit(err)
 	}
 
-	// Expose metrics
-	exposeMetrics(metricsPort, cfg)
+	//ctx := context.TODO()
+
+	// Create Service object to expose the metrics port.
+	/*var metricsPort int32 = 2112
+	service, err := metrics.ExposeMetricsPort(ctx, metricsPort)
+	fmt.Printf("Service %v", service)
+	if err != nil {
+		log.Info("ERROR EXPOSING METRICS")
+		log.Info(err.Error())
+	}*/
+	// Create one `ServiceMonitor` per application per namespace.
+	// Change below value to name of the Namespace you want the `ServiceMonitor` to be created in.
+	/*ns := "openshift-marketplace"
+	// Populate below with the Service(s) for which you want to create ServiceMonitors.
+	services := []*v1.Service{}
+	services = append(services, service)
+
+	fmt.Printf("Services %v", services)
+
+	// Pass the Service(s) to the helper function, which in turn returns the array of `ServiceMonitor` objects.
+	_, err = metrics.CreateServiceMonitors(cfg, ns, services)
+	if err != nil {
+		log.Info("ERROR CREATING SERVICE MONITORS")
+		log.Info(err.Error())
+	} else {
+		log.Info("NO ERROR CREATING SERVICE MONITORS")
+
+	}
+
+	log.Info("Expose-Metrics succeded")
+	log.Info("Starting the Cmd.")*/
 
 	// Serve a health check.
 	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -132,33 +243,4 @@ func exit(err error) {
 	// No error, graceful termination
 	log.Info("The operator exited gracefully, exit code 0")
 	os.Exit(0)
-}
-
-func exposeMetrics(metricsPort int32, cfg *rest.Config) {
-	ctx := context.TODO()
-
-	// Create Service object to expose the metrics port.=
-	service, err := metrics.ExposeMetricsPort(ctx, metricsPort)
-	fmt.Printf("Service %v", service)
-	if err != nil {
-		log.Info("ERROR EXPOSING METRICS")
-		log.Info(err.Error())
-	}
-	// Create one `ServiceMonitor` per application per namespace.
-	ns := "openshift-marketplace"
-	// Populate below with the Service(s) for which you want to create ServiceMonitors.
-	services := []*corev1.Service{}
-	services = append(services, service)
-
-	fmt.Printf("Services %v", services)
-
-	// Pass the Service(s) to the helper function, which in turn returns the array of `ServiceMonitor` objects.
-	_, err = metrics.CreateServiceMonitors(cfg, ns, services)
-	if err != nil {
-		log.Info("ERROR CREATING SERVICE MONITORS")
-		log.Info(err.Error())
-	} else {
-		log.Info("NO ERROR CREATING SERVICE MONITORS")
-
-	}
 }

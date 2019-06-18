@@ -1,0 +1,146 @@
+MONITORING IN MARKETPLACE OPERATOR
+
+This documentation describes the steps followed, to expose custom metrics as well as the generic Go metrics provided by the SDK.
+
+Steps followed:
+1. Build the image, push it to quay.
+2. Update the path of the image in "10_operator.yaml"
+3. Create a service to expose the pods.
+4. Create a service monitor object, which takes in the service object, specifying the port in which metrics are to be exposed.
+5. Create a prometheus instance, including the service monitor.
+6. Expose the prometheus instance.
+
+Step 1:
+The following libraries provided by the prometheus open source project are included in main.go file.
+github.com/prometheus/client_golang/prometheus
+github.com/prometheus/client_golang/prometheus/promauto
+github.com/prometheus/client_golang/prometheus/promhttp
+Any new parameter which is to be used to collect metrics, has to be registered with prometheus using “promauto”. 
+
+Example:
+
+var (
+    testCounter = promauto.NewCounter(prometheus.CounterOpts{
+        Name: "myapp_processed_ops_total",
+        Help: "The total number of processed events Test",
+    })
+)
+
+If promauto is not used, the metrics can be registered during initialization:
+
+Example:
+
+ func init() {
+  prometheus.MustRegister(testCounter)
+  log.Printf("Registered")
+ }
+
+
+
+
+To expose the metrics at a particular endpoint “promhttp” is used. The given example, metrics are exposed at port 8080, at /metrics endpoint.
+
+The image of the provided code can be built and pushed by following the steps below:
+operator-sdk build quay.io/$username/$repository:$tag
+docker push quay.io/$username/$repository:$tag
+
+Step 2:
+Update the path of the image in operator.yaml, to the path in quay.io (where the image was pushed in previous step).
+
+containers:
+       - name: marketplace-operator
+         image: quay.io/$username/$repository:$tag
+
+
+Step 3:
+Create a service to expose the pods. The following template can be used:
+
+kind: Service
+apiVersion: v1
+metadata:
+  name: marketplace
+  namespace: openshift-marketplace
+  labels:
+    app: marketplace
+spec:
+  ports:
+    - name: metrics
+      protocol: TCP
+      port: 8080
+  selector:
+    name: marketplace-operator
+The port specified in the service object is where the metrics will be exposed. A route can be created, specifying this endpoint to check the metrics:
+The metrics is to be in the following format, such that it can be queried by Prometheus using promQL.
+
+go_threads 13
+# HELP myapp_processed_ops_total The total number of processed events Test
+# TYPE myapp_processed_ops_total counter
+myapp_processed_ops_total 132
+# HELP process_cpu_seconds_total Total user and system CPU time spent in seconds.
+# TYPE process_cpu_seconds_total counter
+
+
+Step 4:
+Installing the prometheus operator, from operatorHub.io provides us with 4 apis. 
+Prometheus
+Prometheus Rule
+Service Monitor
+Alert Manager
+
+Service Monitor object specifies the endpoint where the metrics are exposed. It takes the Service which was created in the previous step.
+The following template can be used to create a Service Monitor:
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: serviceMonitor
+  labels:
+   name: prometheus
+  namespace: openshift-marketplace
+spec:
+  selector:
+    matchLabels:
+     name: marketplace
+  endpoints:
+    - port: metrics
+      interval: 30s
+
+Step 5:
+A prometheus instance can now be created, including the service monitor to register the targets:
+The following template can be used:
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: prometheus
+  labels:
+    prometheus: k8s
+  namespace: openshift-marketplace
+spec:
+  replicas: 2
+  version: v2.7.1
+  serviceAccountName: prometheus-k8s
+  securityContext: {}
+  serviceMonitorSelector: 
+    matchLabels:
+      name: serviceMonitor
+  ruleSelector: {}
+  alerting:
+    alertmanagers:
+      - namespace: monitoring
+        name: alertmanager-main
+        port: metrics
+
+Step 6:
+Create an external route to the prometheus to access to GUI.
+-- oc expose prometheus-operated
+
+
+In the targets section, the end-point of the marketplace will be registered. PromQL queries can be used to analyze the data points.
+
+----------------------------------------------------------------------------------------------------------------------------------------------------
+
+To integrate prometheus instance with grafana, use the following command to create grafa instance on openshift. The crd along with the required changes
+is present in this repository:
+
+1. oc apply -f grafana.yaml - will create grafana instance
+2. oc expose svc grafana - create a route to the service to access the GUI
