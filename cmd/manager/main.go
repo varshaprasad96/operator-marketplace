@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"runtime"
@@ -16,9 +18,13 @@ import (
 	"github.com/operator-framework/operator-marketplace/pkg/registry"
 	"github.com/operator-framework/operator-marketplace/pkg/status"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
+	"github.com/operator-framework/operator-sdk/pkg/metrics"
+	"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	log "github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
@@ -30,6 +36,8 @@ const (
 
 	initialWait                = time.Duration(1) * time.Minute
 	updateNotificationSendWait = time.Duration(10) * time.Minute
+	metricsHost                = "0.0.0.0"
+	metricsPort                = 8383
 )
 
 func printVersion() {
@@ -58,7 +66,11 @@ func main() {
 	}
 
 	// Create a new Cmd to provide shared dependencies and start components
-	mgr, err := manager.New(cfg, manager.Options{Namespace: namespace})
+	mgr, err := manager.New(cfg, manager.Options{
+		Namespace:          namespace,
+		MapperProvider:     restmapper.NewDynamicRESTMapper,
+		MetricsBindAddress: fmt.Sprintf("%s:%d", metricsHost, metricsPort),
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -82,6 +94,9 @@ func main() {
 	if err := controller.AddToManager(mgr); err != nil {
 		exit(err)
 	}
+
+	// Expose metrics
+	exposeMetrics(metricsPort, cfg)
 
 	// Serve a health check.
 	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -117,4 +132,33 @@ func exit(err error) {
 	// No error, graceful termination
 	log.Info("The operator exited gracefully, exit code 0")
 	os.Exit(0)
+}
+
+func exposeMetrics(metricsPort int32, cfg *rest.Config) {
+	ctx := context.TODO()
+
+	// Create Service object to expose the metrics port.=
+	service, err := metrics.ExposeMetricsPort(ctx, metricsPort)
+	fmt.Printf("Service %v", service)
+	if err != nil {
+		log.Info("ERROR EXPOSING METRICS")
+		log.Info(err.Error())
+	}
+	// Create one `ServiceMonitor` per application per namespace.
+	ns := "openshift-marketplace"
+	// Populate below with the Service(s) for which you want to create ServiceMonitors.
+	services := []*corev1.Service{}
+	services = append(services, service)
+
+	fmt.Printf("Services %v", services)
+
+	// Pass the Service(s) to the helper function, which in turn returns the array of `ServiceMonitor` objects.
+	_, err = metrics.CreateServiceMonitors(cfg, ns, services)
+	if err != nil {
+		log.Info("ERROR CREATING SERVICE MONITORS")
+		log.Info(err.Error())
+	} else {
+		log.Info("NO ERROR CREATING SERVICE MONITORS")
+
+	}
 }
