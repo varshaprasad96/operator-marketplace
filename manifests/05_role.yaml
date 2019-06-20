@@ -47,6 +47,7 @@ rules:
   resources:
   - pods
   - secrets
+  - routes
   verbs:
   - get
   - list
@@ -56,6 +57,7 @@ rules:
   resources:
   - services
   - serviceaccounts
+  - routes
   verbs:
   - get
   - create
@@ -69,6 +71,7 @@ rules:
   - deployments
   - deployments/finalizers
   - replicasets
+  - routes
   verbs:
   - get
   - create
@@ -92,6 +95,13 @@ rules:
   - monitoring.coreos.com
   resources:
   - servicemonitors
+  verbs:
+  - get
+  - create
+- apiGroups:
+  - route.openshift.io
+  resources:
+  - routes
   verbs:
   - get
   - create

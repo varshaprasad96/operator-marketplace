@@ -31,7 +31,7 @@ spec:
         tolerationSeconds: 120
       containers:
         - name: marketplace-operator
-          image: quay.io/vnarsing/marketplace:latest26
+          image: quay.io/vnarsing/operator-marketplace:sre-metrics-route-3
           ports:
           - containerPort: 60000
             name: metrics
