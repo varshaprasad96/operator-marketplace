@@ -7,6 +7,10 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/operator-framework/operator-marketplace/pkg/testmetrics"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	olm "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1alpha1"
 	"github.com/operator-framework/operator-lifecycle-manager/pkg/lib/signals"
 	"github.com/operator-framework/operator-marketplace/pkg/apis"
@@ -16,7 +20,9 @@ import (
 	"github.com/operator-framework/operator-marketplace/pkg/registry"
 	"github.com/operator-framework/operator-marketplace/pkg/status"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
+	"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
+
 	log "github.com/sirupsen/logrus"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -33,13 +39,24 @@ const (
 )
 
 func printVersion() {
-	log.Printf("Go Version: %s", runtime.Version())
+	log.Printf("Hellooo Go Version: %s", runtime.Version())
 	log.Printf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
 	log.Printf("operator-sdk Version: %v", sdkVersion.Version)
 }
 
 func main() {
+
+	/*for i := 0; i < 1000; i++ {
+		histTest.Observe(30 + math.Floor(120*math.Sin(float64(i)*0.1))/10)
+	}*/
+
 	printVersion()
+	testmetrics.RecordMetrics()
+
+	http.Handle("/metrics", promhttp.Handler())
+	go http.ListenAndServe(":8080", nil)
+
+	log.Info("Custom Metircs recorded")
 
 	// Parse the command line arguments for the registry server image
 	flag.StringVar(&registry.ServerImage, "registryServerImage",
@@ -58,9 +75,13 @@ func main() {
 	}
 
 	// Create a new Cmd to provide shared dependencies and start components
-	mgr, err := manager.New(cfg, manager.Options{Namespace: namespace})
+	mgr, err := manager.New(cfg, manager.Options{
+		Namespace:      namespace,
+		MapperProvider: restmapper.NewDynamicRESTMapper,
+	})
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err, "")
+		os.Exit(1)
 	}
 
 	log.Print("Registering Components.")

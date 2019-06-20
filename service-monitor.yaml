@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: servicemonitorcustom
+  labels:
+   name: marketplace
+  namespace: openshift-marketplace
+spec:
+  selector:
+    matchLabels:
+     name: marketplacecustom
+  endpoints:
+    - port: web
+      interval: 30s
+
