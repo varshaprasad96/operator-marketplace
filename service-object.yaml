@@ -1,0 +1,15 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: marketplacecustom
+  namespace: openshift-marketplace
+  labels:
+    name: marketplacecustom
+spec:
+  ports:
+    - name: web
+      protocol: TCP
+      port: 8080
+  selector:
+    name: marketplace-operator
+
