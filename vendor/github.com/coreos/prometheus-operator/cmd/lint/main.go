@@ -21,7 +21,7 @@ import (
 	"log"
 	"os"
 
-	v1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/ghodss/yaml"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -74,7 +74,7 @@ func main() {
 		case v1.PrometheusRuleKind:
 			j, err := yaml.YAMLToJSON(content)
 			if err != nil {
-				log.Fatalf("unable to convert YAML to JSON: %v", err)
+				log.Fatalf("unable to convert YALM to JSON: %v", err)
 			}
 
 			decoder := json.NewDecoder(bytes.NewBuffer(j))
@@ -88,7 +88,7 @@ func main() {
 		case v1.ServiceMonitorsKind:
 			j, err := yaml.YAMLToJSON(content)
 			if err != nil {
-				log.Fatalf("unable to convert YAML to JSON: %v", err)
+				log.Fatalf("unable to convert YALM to JSON: %v", err)
 			}
 
 			decoder := json.NewDecoder(bytes.NewBuffer(j))

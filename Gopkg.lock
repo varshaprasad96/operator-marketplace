@@ -109,8 +109,6 @@
   packages = [
     "pkg/apis/monitoring",
     "pkg/apis/monitoring/v1",
-    "pkg/client/versioned/scheme",
-    "pkg/client/versioned/typed/monitoring/v1",
   ]
   pruneopts = "NT"
   revision = "7a25bf6b6bb2347dacb235659b73bc210117acc7"
@@ -535,6 +533,7 @@
   packages = [
     "config/v1",
     "operator/v1",
+    "route/v1",
   ]
   pruneopts = "NT"
   revision = "924343028ee3dc875057861a5faa5b817ec87f5b"
@@ -601,7 +600,7 @@
     "internal/util/projutil",
     "internal/util/yamlutil",
     "pkg/k8sutil",
-    "pkg/metrics",
+    "pkg/restmapper",
     "pkg/test",
     "version",
   ]
@@ -749,6 +748,14 @@
   pruneopts = "NT"
   revision = "ffdc059bfe9ce6a4e144ba849dbedead332c6053"
   version = "v1.3.0"
+
+[[projects]]
+  branch = "documentation"
+  digest = "1:06b59c745b21fd266b7998b0395b8dffe1a1365d32270348ee377bcaa085c3ad"
+  name = "github.com/varshaprasad96/operator-custom-metrics"
+  packages = ["."]
+  pruneopts = "NT"
+  revision = "e8238a7329657b68b13dae1f2d677e958410921b"
 
 [[projects]]
   digest = "1:8bcb2616463bc981681c4b26f2aa817be8167682b76fb7884ec3fafdc9f82372"
@@ -1412,6 +1419,7 @@
     "github.com/go-openapi/strfmt",
     "github.com/golang/mock/gomock",
     "github.com/openshift/api/config/v1",
+    "github.com/openshift/api/route/v1",
     "github.com/openshift/client-go/config/clientset/versioned/typed/config/v1",
     "github.com/openshift/library-go/pkg/config/clusteroperator/v1helpers",
     "github.com/openshift/library-go/pkg/operator/v1helpers",
@@ -1422,12 +1430,14 @@
     "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1alpha1",
     "github.com/operator-framework/operator-lifecycle-manager/pkg/lib/signals",
     "github.com/operator-framework/operator-sdk/pkg/k8sutil",
-    "github.com/operator-framework/operator-sdk/pkg/metrics",
+    "github.com/operator-framework/operator-sdk/pkg/restmapper",
     "github.com/operator-framework/operator-sdk/pkg/test",
     "github.com/operator-framework/operator-sdk/version",
+    "github.com/prometheus/client_golang/prometheus",
     "github.com/sirupsen/logrus",
     "github.com/stretchr/testify/assert",
     "github.com/stretchr/testify/require",
+    "github.com/varshaprasad96/operator-custom-metrics",
     "k8s.io/api/apps/v1",
     "k8s.io/api/core/v1",
     "k8s.io/api/rbac/v1",

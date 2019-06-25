@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"net/http"
 	"os"
@@ -39,7 +38,7 @@ const (
 )
 
 func printVersion() {
-	log.Printf("Go Version: %s", runtime.Version())
+	log.Printf("Hi Go Version: %s", runtime.Version())
 	log.Printf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
 	log.Printf("operator-sdk Version: %v", sdkVersion.Version)
 }
@@ -120,9 +119,7 @@ func main() {
 	go catalogsourceconfig.Syncer.Sync(stopCh)
 
 	// Configure metrics if it errors log the error but continue
-	if err := testmetrics.ConfigureMetrics(context.TODO()); err != nil {
-		log.Error(err, "Failed to configure Metrics")
-	}
+	testmetrics.MetricsCollection()
 
 	// Start the Cmd
 	err = mgr.Start(stopCh)
