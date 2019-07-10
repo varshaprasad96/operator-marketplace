@@ -46,6 +46,7 @@ rules:
   - ""
   resources:
   - secrets
+  - pods
   verbs:
   - get
   - list
@@ -85,3 +86,10 @@ rules:
   - update
   - list
   - watch
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - servicemonitors
+  verbs:
+  - get
+  - create
