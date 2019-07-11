@@ -4,8 +4,9 @@ import (
 	"context"
 
 	"github.com/operator-framework/operator-marketplace/pkg/apis/operators/shared"
-	"github.com/operator-framework/operator-marketplace/pkg/apis/operators/v1"
+	v1 "github.com/operator-framework/operator-marketplace/pkg/apis/operators/v1"
 	"github.com/operator-framework/operator-marketplace/pkg/appregistry"
+	"github.com/operator-framework/operator-marketplace/pkg/customMetrics"
 	"github.com/operator-framework/operator-marketplace/pkg/datastore"
 	"github.com/operator-framework/operator-marketplace/pkg/phase"
 	log "github.com/sirupsen/logrus"
@@ -70,6 +71,9 @@ func (h *operatorsourcehandler) Handle(ctx context.Context, in *v1.OperatorSourc
 	outOfSyncCacheReconciler := h.newCacheReconciler(logger, h.datastore, h.client)
 	out, status, err := outOfSyncCacheReconciler.Reconcile(ctx, in)
 	if err != nil {
+		// Update the count of metric variable based on the opsrc which
+		// is  unable to reconcile.
+		customMetrics.UpdateMetrics(in.GetName())
 		return err
 	}
 
@@ -83,6 +87,9 @@ func (h *operatorsourcehandler) Handle(ctx context.Context, in *v1.OperatorSourc
 	// the regular phase reconciler to handle this event.
 	phaseReconciler, err := h.factory.GetPhaseReconciler(logger, in)
 	if err != nil {
+		// Update the count of metric variable based on the opsrc which
+		// is  unable to reconcile.
+		customMetrics.UpdateMetrics(in.GetName())
 		return err
 	}
 

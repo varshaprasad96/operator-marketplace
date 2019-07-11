@@ -1,0 +1,11 @@
+apiVersion: "operators.coreos.com/v1"
+kind: OperatorSource
+metadata:
+  name: bad-url-operators
+  namespace: openshift-marketplace
+spec:
+  type: appregistry
+  endpoint: https://quay/cnr
+  registryNamespace: badurl
+  displayName: "Bad URL Operators"
+  publisher: "Bad URL"

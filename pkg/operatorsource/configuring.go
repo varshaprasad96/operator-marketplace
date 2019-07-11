@@ -5,9 +5,10 @@ import (
 	"errors"
 
 	"github.com/operator-framework/operator-marketplace/pkg/apis/operators/shared"
-	"github.com/operator-framework/operator-marketplace/pkg/apis/operators/v1"
+	v1 "github.com/operator-framework/operator-marketplace/pkg/apis/operators/v1"
 	"github.com/operator-framework/operator-marketplace/pkg/appregistry"
 	interface_client "github.com/operator-framework/operator-marketplace/pkg/client"
+	customMetrics "github.com/operator-framework/operator-marketplace/pkg/customMetrics"
 	"github.com/operator-framework/operator-marketplace/pkg/datastore"
 	"github.com/operator-framework/operator-marketplace/pkg/grpccatalog"
 	"github.com/operator-framework/operator-marketplace/pkg/phase"
@@ -156,6 +157,8 @@ func (r *configuringReconciler) getManifestMetadata(spec *v1.OperatorSourceSpec,
 
 	metadata, err = registry.ListPackages(spec.RegistryNamespace)
 	if err != nil {
+		log.Info("Enter here - Error")
+		customMetrics.UpdateMetrics(spec.DisplayName)
 		return metadata, err
 	}
 
