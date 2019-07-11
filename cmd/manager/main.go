@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"time"
 
 	apiconfigv1 "github.com/openshift/api/config/v1"
@@ -15,6 +16,7 @@ import (
 	"github.com/operator-framework/operator-marketplace/pkg/catalogsourceconfig"
 	"github.com/operator-framework/operator-marketplace/pkg/controller"
 	"github.com/operator-framework/operator-marketplace/pkg/defaults"
+	customMetrics "github.com/operator-framework/operator-marketplace/pkg/metrics"
 	"github.com/operator-framework/operator-marketplace/pkg/migrator"
 	"github.com/operator-framework/operator-marketplace/pkg/operatorsource"
 	"github.com/operator-framework/operator-marketplace/pkg/proxy"
@@ -22,8 +24,11 @@ import (
 	"github.com/operator-framework/operator-marketplace/pkg/status"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	"github.com/operator-framework/operator-sdk/pkg/leader"
+	"github.com/operator-framework/operator-sdk/pkg/metrics"
+	"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	log "github.com/sirupsen/logrus"
+	v1 "k8s.io/api/core/v1"
 	kruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -36,8 +41,7 @@ import (
 const (
 	// TODO: resyncInterval is hardcoded to 1 hour now, it would have to be
 	// configurable on a per OperatorSource level.
-	resyncInterval = time.Duration(60) * time.Minute
-
+	resyncInterval             = time.Duration(60) * time.Minute
 	initialWait                = time.Duration(1) * time.Minute
 	updateNotificationSendWait = time.Duration(10) * time.Minute
 )
@@ -52,6 +56,10 @@ func main() {
 	printVersion()
 
 	// Parse the command line arguments
+	// Start collecting custom metrics
+	customMetrics.RecordMetrics()
+
+	// Parse the command line arguments for the registry server image
 	flag.StringVar(&registry.ServerImage, "registryServerImage",
 		registry.DefaultServerImage, "the image to use for creating the operator registry pod")
 	flag.StringVar(&defaults.Dir, "defaultsDir",
@@ -85,7 +93,10 @@ func main() {
 	// from the operator's namespace. The reason for watching all namespaces is
 	// watch for CatalogSources in targetNamespaces being deleted and recreate
 	// them.
-	mgr, err := manager.New(cfg, manager.Options{Namespace: ""})
+	mgr, err := manager.New(cfg, manager.Options{
+		Namespace:      namespace,
+		MapperProvider: restmapper.NewDynamicRESTMapper,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -116,6 +127,25 @@ func main() {
 	// Setup all Controllers
 	if err := controller.AddToManager(mgr); err != nil {
 		exit(err)
+	}
+
+	// convert the value of MetricsPort from string to int32.
+	port, err := strconv.ParseInt(customMetrics.METRICSPORT, 10, 32)
+	if err != nil {
+		log.Errorf("Unable to parse metrics port: %v", err)
+	}
+	metricsPort := int32(port)
+
+	// Create a Service object to expose the metrics port.
+	service, err := metrics.ExposeMetricsPort(context.TODO(), metricsPort)
+	if err != nil {
+		log.Errorf("Unable to expose metrics port: %v", err)
+	}
+
+	// Create a serviceMonitor for the namespace and register the service created above to it.
+	_, err = metrics.CreateServiceMonitors(cfg, namespace, []*v1.Service{service})
+	if err != nil {
+		log.Errorf("Error Creating Service Monitor: %v", err)
 	}
 
 	// Serve a health check.
