@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"runtime"
@@ -16,8 +18,12 @@ import (
 	"github.com/operator-framework/operator-marketplace/pkg/registry"
 	"github.com/operator-framework/operator-marketplace/pkg/status"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
+	"github.com/operator-framework/operator-sdk/pkg/metrics"
+	"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
+
 	log "github.com/sirupsen/logrus"
+	v1 "k8s.io/api/core/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -26,10 +32,13 @@ import (
 const (
 	// TODO: resyncInterval is hardcoded to 1 hour now, it would have to be
 	// configurable on a per OperatorSource level.
-	resyncInterval = time.Duration(60) * time.Minute
-
+	resyncInterval             = time.Duration(60) * time.Minute
 	initialWait                = time.Duration(1) * time.Minute
 	updateNotificationSendWait = time.Duration(10) * time.Minute
+
+	// Endpoint and path where the metrics would be exposed.
+	metricsHost = "0.0.0.0"
+	metricsPort = 8383
 )
 
 func printVersion() {
@@ -57,10 +66,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Create a new Cmd to provide shared dependencies and start components
-	mgr, err := manager.New(cfg, manager.Options{Namespace: namespace})
+	// Create a new Cmd to provide shared dependencies and start components at the specified
+	// namespace, with metrics exposed to the provided port and host.
+	mgr, err := manager.New(cfg, manager.Options{
+		Namespace:          namespace,
+		MapperProvider:     restmapper.NewDynamicRESTMapper,
+		MetricsBindAddress: fmt.Sprintf("%s:%d", metricsHost, metricsPort),
+	})
 	if err != nil {
 		log.Fatal(err)
+		os.Exit(1)
 	}
 
 	log.Print("Registering Components.")
@@ -81,6 +96,20 @@ func main() {
 	// Setup all Controllers
 	if err := controller.AddToManager(mgr); err != nil {
 		exit(err)
+	}
+
+	ctx := context.TODO()
+
+	// Create Service object to expose the metrics port.
+	service, err := metrics.ExposeMetricsPort(ctx, metricsPort)
+	if err != nil {
+		log.Errorf("Unable to expose metrics port: %v", err)
+	}
+
+	// Create a serviceMonitor for the namespace, and register the service created above to it.
+	_, err = metrics.CreateServiceMonitors(cfg, namespace, []*v1.Service{service})
+	if err != nil {
+		log.Errorf("Error Creating Service Monitor: %v", err)
 	}
 
 	// Serve a health check.
