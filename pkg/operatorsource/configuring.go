@@ -5,11 +5,12 @@ import (
 	"errors"
 
 	"github.com/operator-framework/operator-marketplace/pkg/apis/operators/shared"
-	"github.com/operator-framework/operator-marketplace/pkg/apis/operators/v1"
+	v1 "github.com/operator-framework/operator-marketplace/pkg/apis/operators/v1"
 	"github.com/operator-framework/operator-marketplace/pkg/appregistry"
 	interface_client "github.com/operator-framework/operator-marketplace/pkg/client"
 	"github.com/operator-framework/operator-marketplace/pkg/datastore"
 	"github.com/operator-framework/operator-marketplace/pkg/grpccatalog"
+	"github.com/operator-framework/operator-marketplace/pkg/metrics"
 	"github.com/operator-framework/operator-marketplace/pkg/phase"
 	log "github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -156,6 +157,8 @@ func (r *configuringReconciler) getManifestMetadata(spec *v1.OperatorSourceSpec,
 
 	metadata, err = registry.ListPackages(spec.RegistryNamespace)
 	if err != nil {
+		errorMessage := metrics.ErrorMessage(err.Error())
+		metrics.UpdateMetrics(spec.DisplayName, errorMessage.OpsrcErrorToString())
 		return metadata, err
 	}
 
