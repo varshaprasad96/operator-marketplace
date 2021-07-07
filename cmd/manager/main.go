@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"time"
 
+	routev1 "github.com/openshift/api/route/v1"
+
 	olm "github.com/operator-framework/operator-lifecycle-manager/pkg/api/apis/operators/v1alpha1"
 	"github.com/operator-framework/operator-lifecycle-manager/pkg/lib/signals"
 	"github.com/operator-framework/operator-marketplace/pkg/apis"
@@ -15,8 +17,11 @@ import (
 	"github.com/operator-framework/operator-marketplace/pkg/operatorsource"
 	"github.com/operator-framework/operator-marketplace/pkg/registry"
 	"github.com/operator-framework/operator-marketplace/pkg/status"
+	"github.com/operator-framework/operator-marketplace/pkg/testmetrics"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
+	"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
+
 	log "github.com/sirupsen/logrus"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -33,12 +38,13 @@ const (
 )
 
 func printVersion() {
-	log.Printf("Go Version: %s", runtime.Version())
+	log.Printf("Hi Go Version: %s", runtime.Version())
 	log.Printf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
 	log.Printf("operator-sdk Version: %v", sdkVersion.Version)
 }
 
 func main() {
+
 	printVersion()
 
 	// Parse the command line arguments for the registry server image
@@ -57,10 +63,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Create a new Cmd to provide shared dependencies and start components
-	mgr, err := manager.New(cfg, manager.Options{Namespace: namespace})
+	mgr, err := manager.New(cfg, manager.Options{
+		Namespace:      namespace,
+		MapperProvider: restmapper.NewDynamicRESTMapper,
+	})
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err, "")
+		os.Exit(1)
 	}
 
 	log.Print("Registering Components.")
@@ -68,9 +77,20 @@ func main() {
 	catalogsourceconfig.InitializeStaticSyncer(mgr.GetClient(), initialWait)
 	registrySyncer := operatorsource.NewRegistrySyncer(mgr.GetClient(), initialWait, resyncInterval, updateNotificationSendWait, catalogsourceconfig.Syncer, catalogsourceconfig.Syncer)
 
+	log.Info("Initialize csc")
+
 	// Setup Scheme for all defined resources
 	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
 		exit(err)
+	}
+
+	log.Info("Trying to register routes")
+
+	// Adding routes to SDK Scheme
+	if err := routev1.AddToScheme(mgr.GetScheme()); err != nil {
+		log.Info("Registering routes - error")
+		log.Error(err, "")
+		os.Exit(1)
 	}
 
 	// Add external resource to scheme
@@ -97,6 +117,9 @@ func main() {
 
 	go registrySyncer.Sync(stopCh)
 	go catalogsourceconfig.Syncer.Sync(stopCh)
+
+	// Configure metrics if it errors log the error but continue
+	testmetrics.MetricsCollection()
 
 	// Start the Cmd
 	err = mgr.Start(stopCh)
